@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Base URL untuk backend API
   // Gunakan relative path agar otomatis cocok di Vercel ("/api" jika pakai API routes, atau root jika custom server)
   const API_BASE_URL =
-    window.location.hostname === "localhost" ? "http://localhost:3000" : "genio-teal.vercel.app";
+    window.location.hostname === "localhost" ? "http://localhost:3000" : "https://genio-teal.vercel.app";
 
   // Event listener untuk form submission
   form.addEventListener("submit", async function (e) {
@@ -217,4 +217,5 @@ document.addEventListener("DOMContentLoaded", function () {
     updateFileDisplay();
   };
 });
+
 

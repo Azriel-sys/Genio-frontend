@@ -5,30 +5,31 @@ document.addEventListener("DOMContentLoaded", function () {
   const sendBtn = document.getElementById("send-btn");
   const fileContainer = document.getElementById("file-upload-container");
 
-  // State untuk file yang akan diupload
-  let files = [];
+  // State untuk file yang akan diupload (hanya 1 file)
+  let file = null;
 
   // Base URL untuk backend API
-  // Gunakan relative path agar otomatis cocok di Vercel ("/api" jika pakai API routes, atau root jika custom server)
   const API_BASE_URL =
-    window.location.hostname === "localhost" ? "http://localhost:3000" : "https://genio-teal.vercel.app";
+    window.location.hostname === "localhost"
+      ? "http://localhost:3000"
+      : "https://genio-teal.vercel.app";
 
   // Event listener untuk form submission
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
 
     const userMessage = input.value.trim();
-    if (!userMessage && files.length === 0) return;
+    if (!userMessage && !file) return;
 
-    // Buat salinan files sebelum dikosongkan
-    const attachedFiles = files.slice();
+    // Buat salinan file sebelum reset
+    const attachedFile = file;
 
     // Tambahkan pesan pengguna ke chat
-    appendMessage("user", userMessage, attachedFiles);
+    appendMessage("user", userMessage, attachedFile ? [attachedFile] : []);
 
-    // Kosongkan input
+    // Kosongkan input dan file
     input.value = "";
-    files = [];
+    file = null;
     updateFileDisplay();
 
     // Tampilkan indikator typing
@@ -37,24 +38,20 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       let response;
 
-      if (attachedFiles.length > 0) {
-        // Jika ada file, gunakan endpoint yang sesuai
-        const file = attachedFiles[0];
+      if (attachedFile) {
         let endpoint;
-
-        if (file.type.startsWith("image/")) {
+        if (attachedFile.type.startsWith("image/")) {
           endpoint = "/generate-image";
-        } else if (file.type.startsWith("audio/")) {
+        } else if (attachedFile.type.startsWith("audio/")) {
           endpoint = "/generate-audio";
-        } else if (file.type === "application/pdf") {
+        } else if (attachedFile.type === "application/pdf") {
           endpoint = "/generate-pdf";
         } else {
           endpoint = "/generate-text";
         }
 
         const formData = new FormData();
-        formData.append("file", file);
-        // Selalu kirim field message, meski kosong
+        formData.append("file", attachedFile);
         formData.append("message", userMessage || "");
 
         response = await fetch(API_BASE_URL + endpoint, {
@@ -62,7 +59,6 @@ document.addEventListener("DOMContentLoaded", function () {
           body: formData,
         });
       } else {
-        // Jika hanya teks
         response = await fetch(API_BASE_URL + "/generate-text", {
           method: "POST",
           headers: {
@@ -73,15 +69,12 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       const data = await response.json();
-
-      // Hapus indikator typing
       chatBox.removeChild(typingIndicator);
 
-      if (response.ok) {
-        // Tambahkan respons dari bot
+      if (response.ok && data.success !== false) {
         appendMessage("bot", data.reply);
       } else {
-        appendMessage("bot", "Error: " + (data.error || "Terjadi kesalahan"));
+        appendMessage("bot", "❌ " + (data.error || "Terjadi kesalahan"));
       }
     } catch (error) {
       console.error("Error:", error);
@@ -98,23 +91,21 @@ document.addEventListener("DOMContentLoaded", function () {
     const msg = document.createElement("div");
     msg.classList.add("message", sender);
 
-    // Tambahkan konten teks
     if (text) {
       const textNode = document.createElement("div");
       textNode.textContent = text;
       msg.appendChild(textNode);
     }
 
-    // Tambahkan info file jika ada
     if (attachedFiles.length > 0) {
       const fileInfo = document.createElement("div");
       fileInfo.style.marginTop = "8px";
       fileInfo.style.fontSize = "14px";
       fileInfo.style.opacity = "0.8";
 
-      attachedFiles.forEach((file) => {
+      attachedFiles.forEach((f) => {
         const fileDiv = document.createElement("div");
-        fileDiv.textContent = `📎 ${file.name} (${formatFileSize(file.size)})`;
+        fileDiv.textContent = `📎 ${f.name} (${formatFileSize(f.size)})`;
         fileInfo.appendChild(fileDiv);
       });
 
@@ -122,7 +113,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     chatBox.appendChild(msg);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    requestAnimationFrame(() => {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
 
     return msg;
   }
@@ -150,21 +143,19 @@ document.addEventListener("DOMContentLoaded", function () {
     return typing;
   }
 
-  // Fungsi untuk memformat ukuran file
+  // Fungsi format ukuran file
   function formatFileSize(bytes) {
     if (bytes === 0) return "0 Bytes";
-
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
 
-  // Tambahkan event listener untuk input file (dengan createElement)
+  // Input file (1 file saja)
   const fileInput = document.createElement("input");
   fileInput.type = "file";
-  fileInput.multiple = true;
+  fileInput.multiple = false; // hanya 1 file
   fileInput.accept = "image/*,audio/*,.pdf";
   fileInput.style.display = "none";
 
@@ -178,22 +169,18 @@ document.addEventListener("DOMContentLoaded", function () {
   document.body.appendChild(fileInput);
 
   fileInput.addEventListener("change", function () {
-    for (let i = 0; i < this.files.length; i++) {
-      files.push(this.files[i]);
-    }
+    file = this.files[0] || null;
     updateFileDisplay();
-    this.value = ""; // Reset input file
+    this.value = ""; // reset input
   });
 
-  // Fungsi untuk memperbarui tampilan file
+  // Fungsi update tampilan file
   function updateFileDisplay() {
-    // Hapus tampilan file sebelumnya
     while (fileContainer.children.length > 1) {
       fileContainer.removeChild(fileContainer.lastChild);
     }
 
-    // Tambahkan file yang dipilih
-    files.forEach((file, index) => {
+    if (file) {
       const fileItem = document.createElement("div");
       fileItem.classList.add("file-item");
 
@@ -202,22 +189,21 @@ document.addEventListener("DOMContentLoaded", function () {
       else if (file.type.startsWith("audio/")) icon = "🎵";
       else if (file.type === "application/pdf") icon = "📝";
 
-      fileItem.innerHTML = `
-                        ${icon} ${file.name} 
-                        <button type="button" onclick="removeFile(${index})">✕</button>
-                    `;
+      // pakai textContent untuk cegah XSS
+      const fileName = document.createElement("span");
+      fileName.textContent = `${icon} ${file.name}`;
 
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => {
+        file = null;
+        updateFileDisplay();
+      });
+
+      fileItem.appendChild(fileName);
+      fileItem.appendChild(removeBtn);
       fileContainer.appendChild(fileItem);
-    });
+    }
   }
-
-  // Fungsi untuk menghapus file (dibuat global agar bisa dipanggil dari onclick)
-  window.removeFile = function (index) {
-    files.splice(index, 1);
-    updateFileDisplay();
-  };
 });
-
-
-
-
